@@ -4,24 +4,24 @@
 import PackageDescription
 
 let package = Package(
-    name: "KestrelTransition",
+    name: "KestrelTransitions",
     platforms: [
         .iOS(.v15)
     ],
     products: [
         .library(
-            name: "KestrelTransition",
-            targets: ["KestrelTransition"]
+            name: "KestrelTransitions",
+            targets: ["KestrelTransitions"]
         )
     ],
     targets: [
         .target(
-            name: "KestrelTransition",
+            name: "KestrelTransitions",
             path: "Sources/KestrelTransition"
         ),
         .testTarget(
             name: "KestrelTransitionTests",
-            dependencies: ["KestrelTransition"],
+            dependencies: ["KestrelTransitions"],
             path: "Tests/KestrelTransitionTests"
         )
     ]

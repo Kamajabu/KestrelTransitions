@@ -1,4 +1,4 @@
-# KestrelTransition
+# KestrelTransitions
 
 A smooth, customizable transition animation library for iOS that creates beautiful hero-style transitions between views.
 
@@ -18,7 +18,21 @@ Alternatively, add it to your `Package.swift` file:
 ```swift
 dependencies: [
     .package(url: "https://github.com/Kamajabu/KestrelTransitions.git", from: "1.0.0")
+],
+targets: [
+    .target(
+        name: "YourTarget",
+        dependencies: [
+            .product(name: "KestrelTransitions", package: "KestrelTransitions")
+        ]
+    )
 ]
+```
+
+Then import it in your Swift files:
+
+```swift
+import KestrelTransitions
 ```
 
 ## Features
