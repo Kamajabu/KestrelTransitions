@@ -14,8 +14,7 @@ public struct KestrelTransitionModifier: ViewModifier {
     let imageName: String
     let onTrigger: ((CGRect) -> Void)?
     let sourceCornerRadius: CGFloat
-    let enableTapGesture: Bool
-    
+
     @State private var sourceFrame: CGRect = .zero
     
     public func body(content: Content) -> some View {
@@ -37,13 +36,7 @@ public struct KestrelTransitionModifier: ViewModifier {
                 }
             }
         
-        if enableTapGesture {
-            return AnyView(modifiedContent.onTapGesture {
-                triggerTransition()
-            })
-        } else {
-            return AnyView(modifiedContent)
-        }
+        return AnyView(modifiedContent)
     }
     
     private func triggerTransition() {
@@ -99,7 +92,6 @@ public extension View {
         image: UIImage,
         imageName: String,
         sourceCornerRadius: CGFloat = 12,
-        enableTapGesture: Bool = true,
         onTrigger: ((CGRect) -> Void)? = nil
     ) -> some View {
         self.modifier(
@@ -109,7 +101,6 @@ public extension View {
                 imageName: imageName,
                 onTrigger: onTrigger,
                 sourceCornerRadius: sourceCornerRadius,
-                enableTapGesture: enableTapGesture
             )
         )
     }
