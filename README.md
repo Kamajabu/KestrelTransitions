@@ -1,5 +1,9 @@
 # KestrelTransitions
 
+<p align="center">
+  <img src="kestrelTransitionsLogo.png" alt="KestrelTransitions Logo" width="200"/>
+</p>
+
 A smooth, customizable transition animation library for iOS that creates beautiful hero-style transitions between views.
 
 ## Installation
