@@ -13,16 +13,14 @@ public struct KestrelTransitionContext {
     public let sourceFrame: CGRect
     public let destinationFrame: CGRect
     public let image: UIImage
-    public let imageName: String
     public let sourceCornerRadius: CGFloat
     public let destinationCornerRadius: CGFloat
     public let transitionId: String
     
-    public init(sourceFrame: CGRect, destinationFrame: CGRect, image: UIImage, imageName: String, sourceCornerRadius: CGFloat = 12, destinationCornerRadius: CGFloat = 20, transitionId: String = "") {
+    public init(sourceFrame: CGRect, destinationFrame: CGRect, image: UIImage, sourceCornerRadius: CGFloat = 0, destinationCornerRadius: CGFloat = 20, transitionId: String = "") {
         self.sourceFrame = sourceFrame
         self.destinationFrame = destinationFrame
         self.image = image
-        self.imageName = imageName
         self.sourceCornerRadius = sourceCornerRadius
         self.destinationCornerRadius = destinationCornerRadius
         self.transitionId = transitionId
@@ -43,7 +41,7 @@ public class KestrelTransitionAnimator: NSObject, UIViewControllerAnimatedTransi
         super.init()
         print("[KestrelTransition] 🎬 Animator initialized - presenting: \(isPresenting), duration: \(duration)s")
         if let context = context {
-            print("[KestrelTransition] 📋 Context - source: \(context.sourceFrame), destination: \(context.destinationFrame), image: '\(context.imageName)'")
+            print("[KestrelTransition] 📋 Context - source: \(context.sourceFrame), destination: \(context.destinationFrame)")
         } else {
             print("[KestrelTransition] ⚠️ No transition context available, will use default transition")
         }
@@ -95,7 +93,6 @@ public class KestrelTransitionAnimator: NSObject, UIViewControllerAnimatedTransi
                         sourceFrame: context.sourceFrame,
                         destinationFrame: bridgeFrame,
                         image: context.image,
-                        imageName: context.imageName,
                         sourceCornerRadius: context.sourceCornerRadius,
                         destinationCornerRadius: context.destinationCornerRadius,
                         transitionId: context.transitionId

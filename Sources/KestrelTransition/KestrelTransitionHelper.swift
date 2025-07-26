@@ -261,7 +261,6 @@ public class KestrelTransitionRegistry: ObservableObject {
             sourceFrame: pending.sourceFrame,
             destinationFrame: destinationFrame,
             image: pending.image,
-            imageName: pending.imageName,
             sourceCornerRadius: pending.sourceCornerRadius,
             destinationCornerRadius: getDestinationCornerRadius(for: id) ?? 20,
             transitionId: id
@@ -327,7 +326,6 @@ public extension View {
                     sourceFrame: sourceFrame,
                     destinationFrame: destinationFrame,
                     image: image,
-                    imageName: imageName,
                     sourceCornerRadius: 12, // Default for legacy usage
                     destinationCornerRadius: 20, // Default for legacy usage
                     transitionId: id

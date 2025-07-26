@@ -11,8 +11,6 @@ import SwiftUI
 public struct KestrelTransitionModifier: ViewModifier {
     let id: String
     let image: UIImage
-    let imageName: String
-    let onTrigger: ((CGRect) -> Void)?
     let sourceCornerRadius: CGFloat
 
     @State private var sourceFrame: CGRect = .zero
@@ -40,33 +38,15 @@ public struct KestrelTransitionModifier: ViewModifier {
     }
     
     private func triggerTransition() {
-                print("[KestrelTransition] 🔥 Transition triggered for id '\(id)'")
-                print("[KestrelTransition] 📐 Source frame: \(sourceFrame)")
-                
-                var destinationFrame = KestrelTransitionRegistry.shared.getDestinationFrame(for: id)
-                
-                // Handle missing destination frame - let animator find it dynamically
-                if destinationFrame == nil || destinationFrame == .zero {
-                    print("[KestrelTransition] ⏳ No destination frame available for id '\(id)', animator will search view hierarchy")
-                    
-                    // Use zero frame as signal for animator to search dynamically
-                    destinationFrame = .zero
-                } else {
-                    print("[KestrelTransition] 🎯 Found destination frame for id '\(id)': \(destinationFrame!)")
-                }
-                
-                let context = KestrelTransitionContext(
-                    sourceFrame: sourceFrame,
-                    destinationFrame: destinationFrame!,
-                    image: image,
-                    imageName: imageName,
-                    sourceCornerRadius: sourceCornerRadius,
-                    destinationCornerRadius: KestrelTransitionRegistry.shared.getDestinationCornerRadius(for: id) ?? 20,
-                    transitionId: id // Pass the ID for dynamic lookup
-                )
-                print("[KestrelTransition] ✅ Registering transition context with image '\(imageName)'")
-                KestrelTransitionRegistry.shared.registerTransition(context: context)
-                onTrigger?(sourceFrame)
+        let context = KestrelTransitionContext(
+            sourceFrame: sourceFrame,
+            destinationFrame: .zero,
+            image: image,
+            sourceCornerRadius: sourceCornerRadius,
+            destinationCornerRadius: 0,
+            transitionId: id
+        )
+        KestrelTransitionRegistry.shared.registerTransition(context: context)
     }
     
     /// Public method to manually trigger the transition (for external tap handling)
@@ -90,17 +70,13 @@ public extension View {
     func kestrelTransitionSource(
         id: String,
         image: UIImage,
-        imageName: String,
-        sourceCornerRadius: CGFloat = 12,
-        onTrigger: ((CGRect) -> Void)? = nil
+        sourceCornerRadius: CGFloat = 0
     ) -> some View {
         self.modifier(
             KestrelTransitionModifier(
                 id: id,
                 image: image,
-                imageName: imageName,
-                onTrigger: onTrigger,
-                sourceCornerRadius: sourceCornerRadius,
+                sourceCornerRadius: sourceCornerRadius
             )
         )
     }
