@@ -56,8 +56,8 @@ public struct KestrelTransitionSourceModifier: ViewModifier, TransitionCoordinat
                     kestrelLog("Source frame captured: \(frame)", level: .debug, context: id)
                     sourceFrame = frame
                     
-                    KestrelTransitionRegistry.shared.registerTransitionTrigger(for: id) {
-                        triggerTransition()
+                    KestrelTransitionRegistry.shared.registerSourceModifier(for: id) {
+                        prepareTransition()
                     }
                 }
             }
@@ -89,15 +89,14 @@ public struct KestrelTransitionSourceModifier: ViewModifier, TransitionCoordinat
         }
     }
     
-    private func triggerTransition() {
-        let context = KestrelTransitionContext(
+    func prepareTransition() -> KestrelTransitionContext {
+        return KestrelTransitionContext(
             sourceFrame: sourceFrame,
             destinationFrame: .zero,
             image: image,
             transitionId: id,
             configuration: configuration
         )
-        KestrelTransitionRegistry.shared.registerTransition(context: context)
     }
 }
 
@@ -195,8 +194,8 @@ public extension View {
     /// Manually trigger a Kestrel transition for views with custom tap handling
     /// Call this from your custom tap handlers, button actions, etc.
     @MainActor
-    func triggerKestrelTransition(id: String) {
-        KestrelTransitionRegistry.shared.triggerTransition(for: id)
+    func prepareKestrelTransition(id: String) {
+        KestrelTransitionRegistry.shared.prepareTransition(for: id)
     }
 }
 
@@ -211,9 +210,10 @@ public extension UIViewController {
 
 // MARK: - Global Trigger Function
 
-/// Global function to manually trigger a Kestrel transition
-/// - Parameter id: The transition ID to trigger
+/// Prepares a Kestrel transition context for the specified ID
+/// Must be called BEFORE navigation (push/pop) occurs
+/// - Parameter id: The transition ID to prepare
 @MainActor
-public func triggerKestrelTransition(id: String) {
-    KestrelTransitionRegistry.shared.triggerTransition(for: id)
+public func prepareKestrelTransition(id: String) {
+    KestrelTransitionRegistry.shared.prepareTransition(for: id)
 }

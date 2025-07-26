@@ -126,7 +126,7 @@ public class KestrelTransitionRegistry: ObservableObject {
     
     private var transitionDelegate: KestrelTransitionDelegate?
     private var destinationFrames: [String: CGRect] = [:]
-    private var transitionTriggers: [String: () -> Void] = [:]
+    private var sourceModifiers: [String: () -> KestrelTransitionContext] = [:]
     private var pendingTransitions: [String: PendingTransition] = [:]
     private var transitionsInProgress: Set<String> = []
     
@@ -148,74 +148,43 @@ public class KestrelTransitionRegistry: ObservableObject {
     }
     
     public func registerTransition(context: KestrelTransitionContext) {
-        kestrelLog(
-            "Registering transition context with delegate",
-            level: .info,
-            context: context.transitionId
-        )
+        kestrelLog("Registering transition context with delegate", level: .info, context: context.transitionId)
         transitionsInProgress.insert(context.transitionId)
         transitionDelegate?.setKestrelContext(context)
     }
     
     public func setDestinationFrame(_ frame: CGRect, for id: String) {
-        kestrelLog(
-            "Storing destination frame for id '\(id)': \(frame)",
-            level: .debug,
-            context: id
-        )
+        kestrelLog("Storing destination frame: \(frame)", level: .debug, context: id)
         destinationFrames[id] = frame
     }
     
     public func getDestinationFrame(for id: String) -> CGRect? {
         let frame = destinationFrames[id]
         if let frame = frame {
-            kestrelLog(
-                "Retrieved destination frame for id '\(id)': \(frame)",
-                level: .debug,
-                context: id
-            )
+            kestrelLog("Retrieved destination frame: \(frame)", level: .debug, context: id)
         } else {
-            kestrelLog(
-                "No destination frame found for id '\(id)'",
-                level: .warning,
-                context: id
-            )
+            kestrelLog("No destination frame found", level: .warning, context: id)
         }
         return frame
     }
     
     public func clearTransitionInProgress(_ id: String) {
-        kestrelLog(
-            "Clearing transition in progress for id '\(id)'",
-            level: .debug,
-            context: id
-        )
+        kestrelLog("Clearing transition in progress", level: .debug, context: id)
         transitionsInProgress.remove(id)
     }
     
-    public func registerTransitionTrigger(for id: String, trigger: @escaping () -> Void) {
-        kestrelLog(
-            "Registering manual trigger for id '\(id)'",
-            level: .debug,
-            context: id
-        )
-        transitionTriggers[id] = trigger
+    public func registerSourceModifier(for id: String, modifier: @escaping () -> KestrelTransitionContext) {
+        kestrelLog("Registering source modifier", level: .debug, context: id)
+        sourceModifiers[id] = modifier
     }
     
-    public func triggerTransition(for id: String) {
-        kestrelLog(
-            "Manually triggering transition for id '\(id)'",
-            level: .info,
-            context: id
-        )
-        if let trigger = transitionTriggers[id] {
-            trigger()
+    public func prepareTransition(for id: String) {
+        kestrelLog("Preparing transition context", level: .info, context: id)
+        if let createContext = sourceModifiers[id] {
+            let context = createContext()
+            registerTransition(context: context)
         } else {
-            kestrelLog(
-                "No manual trigger registered for id '\(id)'",
-                level: .warning,
-                context: id
-            )
+            kestrelLog("No source modifier registered", level: .warning, context: id)
         }
     }
     

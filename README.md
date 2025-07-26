@@ -10,13 +10,14 @@ A Swift Package Manager library for animating transitions between images in Swif
 
 - **`kestrelTransitionSource`** - Marks an image view as the starting point of a transition (e.g., thumbnail in a list)
 - **`kestrelTransitionTarget`** - Marks an image view as the destination of a transition (e.g., large image in detail view)
-- **`triggerKestrelTransition`** - Initiates the transition animation between source and target
+- **`prepareKestrelTransition`** - Prepares transition context BEFORE navigation occurs (does not trigger animation itself)
 - **`KestrelTransitionRegistry.shared.setupTransition`** - Enables transitions for a specific UINavigationController
 
 ## Requirements
 
 - Both source and target views must be in view controllers managed by the same UINavigationController
 - Navigation controller must be configured with `setupTransition(for:)` before any transitions occur
+- `prepareKestrelTransition(id:)` must be called BEFORE navigation (push/pop) occurs
 - Source and target must use matching transition IDs
 - Target view must be rendered and have a valid frame before transition completes
 
@@ -118,8 +119,8 @@ struct ItemRowView: View {
             }
         }
         .onTapGesture {
-            // Trigger the transition animation
-            triggerKestrelTransition(id: transitionId)
+            // Prepare transition context BEFORE navigation
+            prepareKestrelTransition(id: transitionId)
             // Then navigate (push new view controller)
             onTapped()
         }
@@ -175,7 +176,7 @@ struct ItemDetailView: View {
 2. **Transition Phase** (each transition):
    ```swift
    // 1. User taps source view
-   triggerKestrelTransition(id: "matchingId")  // Prepares transition
+   prepareKestrelTransition(id: "matchingId")  // Prepares transition context
    navigate()                                   // Triggers navigation controller push
    
    // 2. System automatically:
@@ -188,7 +189,7 @@ struct ItemDetailView: View {
 ### Important Notes
 
 - **Navigation Controller**: Source and target must be in UIHostingViewControllers managed by the same UINavigationController
-- **Timing**: `setupTransition(for:)` must be called before any `triggerKestrelTransition()` calls
+- **Timing**: `setupTransition(for:)` must be called before any `prepareKestrelTransition()` calls
 - **ID Matching**: Source and target modifiers must use identical transition IDs
 - **Frame Detection**: Target view must be fully rendered before animation completes (handled automatically)
 
@@ -340,8 +341,8 @@ struct CustomView: View {
                 // Custom logic before transition
                 performAnalytics()
                 
-                // Trigger transition
-                triggerKestrelTransition(id: "customPhoto")
+                // Prepare transition
+                prepareKestrelTransition(id: "customPhoto")
                 
                 // Navigate
                 navigateToDetail()
@@ -371,7 +372,7 @@ struct PhotoGalleryView: View {
                             configuration: .fast
                         )
                         .onTapGesture {
-                            triggerKestrelTransition(id: "photo_\(photo.id)")
+                            prepareKestrelTransition(id: "photo_\(photo.id)")
                             showPhotoDetail(photo)
                         }
                 } placeholder: {
@@ -443,7 +444,7 @@ KestrelLogger.shared.configure(with: KestrelLoggingConfig(isEnabled: false))
 1. **Transition not triggering**
    - Ensure `KestrelTransitionRegistry.shared.setupTransition(for:)` is called
    - Verify transition IDs match between source and target
-   - Check that `triggerKestrelTransition(id:)` is called
+   - Check that `prepareKestrelTransition(id:)` is called BEFORE navigation
 
 2. **Image not animating**
    - Confirm the UIImage is properly loaded and not nil
