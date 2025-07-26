@@ -6,6 +6,20 @@
 
 A Swift Package Manager library for animating transitions between images in SwiftUI views. Designed for MVVM+C architecture with UIHostingViewControllers nested in UINavigationController transitions.
 
+## Core Components
+
+- **`kestrelTransitionSource`** - Marks an image view as the starting point of a transition (e.g., thumbnail in a list)
+- **`kestrelTransitionTarget`** - Marks an image view as the destination of a transition (e.g., large image in detail view)
+- **`triggerKestrelTransition`** - Initiates the transition animation between source and target
+- **`KestrelTransitionRegistry.shared.setupTransition`** - Enables transitions for a specific UINavigationController
+
+## Requirements
+
+- Both source and target views must be in view controllers managed by the same UINavigationController
+- Navigation controller must be configured with `setupTransition(for:)` before any transitions occur
+- Source and target must use matching transition IDs
+- Target view must be rendered and have a valid frame before transition completes
+
 ## Features
 
 - Animate image transitions between SwiftUI views during navigation
@@ -36,7 +50,7 @@ dependencies: [
 
 ### 1. Setup Navigation Controller
 
-First, configure your navigation controller to support KestrelTransitions:
+**REQUIRED FIRST STEP**: Configure your navigation controller to support KestrelTransitions. This must be done during coordinator/navigation setup, before any transitions are triggered:
 
 ```swift
 import KestrelTransitions
@@ -74,7 +88,7 @@ func application(_ application: UIApplication, didFinishLaunchingWithOptions lau
 
 ### 3. Add Source Transition
 
-In your source view (e.g., list item), add the `kestrelTransitionSource` modifier:
+In your source view (e.g., list item), add the `kestrelTransitionSource` modifier. This marks the image that will animate to the destination:
 
 ```swift
 import SwiftUI
@@ -104,8 +118,9 @@ struct ItemRowView: View {
             }
         }
         .onTapGesture {
-            // Trigger the transition
+            // Trigger the transition animation
             triggerKestrelTransition(id: transitionId)
+            // Then navigate (push new view controller)
             onTapped()
         }
     }
@@ -114,7 +129,7 @@ struct ItemRowView: View {
 
 ### 4. Add Target Transition
 
-In your destination view, add the `kestrelTransitionTarget` modifier:
+In your destination view, add the `kestrelTransitionTarget` modifier. This marks where the source image will animate to:
 
 ```swift
 import SwiftUI
@@ -133,6 +148,7 @@ struct ItemDetailView: View {
                     .frame(height: 300)
                     .cornerRadius(20)
                     // Add KestrelTransition target
+                    // Mark as transition destination with matching ID
                     .kestrelTransitionTarget(id: transitionId)
                 
                 Text(item.name)
@@ -145,6 +161,36 @@ struct ItemDetailView: View {
     }
 }
 ```
+
+## How It Works
+
+### Execution Flow
+
+1. **Setup Phase** (once per navigation controller):
+   ```swift
+   // Must happen before any transitions
+   KestrelTransitionRegistry.shared.setupTransition(for: navigationController)
+   ```
+
+2. **Transition Phase** (each transition):
+   ```swift
+   // 1. User taps source view
+   triggerKestrelTransition(id: "matchingId")  // Prepares transition
+   navigate()                                   // Triggers navigation controller push
+   
+   // 2. System automatically:
+   //    - Captures source image frame
+   //    - Waits for target view to render
+   //    - Captures target image frame  
+   //    - Performs morphing animation
+   ```
+
+### Important Notes
+
+- **Navigation Controller**: Source and target must be in UIHostingViewControllers managed by the same UINavigationController
+- **Timing**: `setupTransition(for:)` must be called before any `triggerKestrelTransition()` calls
+- **ID Matching**: Source and target modifiers must use identical transition IDs
+- **Frame Detection**: Target view must be fully rendered before animation completes (handled automatically)
 
 ## Advanced Configuration
 
