@@ -59,6 +59,11 @@ public class KestrelTransitionAnimator: NSObject, UIViewControllerAnimatedTransi
         }
         
         if isPresenting {
+            // Notify that presentation is starting - hide source view
+            NotificationCenter.default.post(
+                name: Notification.Name("KestrelTransitionPresentationStarted"),
+                object: context.transitionId
+            )
             animatePresentation(using: transitionContext, heroContext: context)
         } else {
             animateDismissal(using: transitionContext, heroContext: context)
@@ -124,6 +129,7 @@ public class KestrelTransitionAnimator: NSObject, UIViewControllerAnimatedTransi
         fatalError("KestrelTransition: Bridge system could not provide destination frame for id '\(context.transitionId)'. Ensure kestrelTransitionTarget is properly configured and view is rendered.")
     }
     
+    /// Animates presentation transition with image morphing and view fade-in
     private func animatePresentation(using transitionContext: UIViewControllerContextTransitioning, heroContext: KestrelTransitionContext) {
         guard let toViewController = transitionContext.viewController(forKey: .to),
               let fromViewController = transitionContext.viewController(forKey: .from) else {
@@ -131,34 +137,46 @@ public class KestrelTransitionAnimator: NSObject, UIViewControllerAnimatedTransi
             return
         }
         
+        setupDestinationView(toViewController, transitionContext: transitionContext)
+        let (sourceImageView, destinationImageView) = setupPresentationImageViews(heroContext, transitionContext: transitionContext)
+        
+        performPresentationAnimation(
+            sourceImageView: sourceImageView,
+            destinationImageView: destinationImageView,
+            fromViewController: fromViewController,
+            toViewController: toViewController,
+            heroContext: heroContext,
+            transitionContext: transitionContext
+        )
+    }
+    
+    /// Sets up destination view controller for presentation
+    private func setupDestinationView(_ toViewController: UIViewController, transitionContext: UIViewControllerContextTransitioning) {
         let containerView = transitionContext.containerView
         let finalFrame = transitionContext.finalFrame(for: toViewController)
-        let config = heroContext.configuration
         
-        kestrelLog(
-            "Setting up presentation - final frame: \(finalFrame)",
-            level: .debug,
-            context: heroContext.transitionId
-        )
-        
-        // Check if destination view is already added (from frame detection)
         if !containerView.subviews.contains(toViewController.view) {
             toViewController.view.frame = finalFrame
-            toViewController.view.alpha = 1
+            toViewController.view.alpha = 0
             containerView.addSubview(toViewController.view)
         } else {
-            toViewController.view.alpha = 1
+            toViewController.view.alpha = 0
         }
+    }
+    
+    /// Creates and configures image views for presentation transition
+    private func setupPresentationImageViews(
+        _ heroContext: KestrelTransitionContext, transitionContext: UIViewControllerContextTransitioning
+    ) -> (UIView, UIView) {
+        let containerView = transitionContext.containerView
         
-        // Create transitioning image views for morphing effect
-        kestrelLog("Creating transition image views", level: .debug, context: heroContext.transitionId)
         let sourceImageView = createTransitionImageView(from: heroContext)
         let destinationImageView = createDestinationImageView(from: heroContext)
         
         destinationImageView.frame = heroContext.sourceFrame
         destinationImageView.alpha = 0
         
-        // Remove autoresizing masks and manually manage sizing
+        // Configure manual sizing for destination image view
         destinationImageView.subviews.forEach { subview in
             subview.autoresizingMask = []
             subview.frame = CGRect(origin: .zero, size: heroContext.sourceFrame.size)
@@ -167,13 +185,20 @@ public class KestrelTransitionAnimator: NSObject, UIViewControllerAnimatedTransi
         containerView.addSubview(sourceImageView)
         containerView.addSubview(destinationImageView)
         
-        // Animate in two phases for smooth morphing
-        kestrelLog(
-            "Phase 1: Starting scale and move animation (\(config.duration * 0.6)s)",
-            level: .debug,
-            context: heroContext.transitionId
-        )
-        
+        return (sourceImageView, destinationImageView)
+    }
+    
+    /// Performs the main presentation animation with morphing and fade effects
+    private func performPresentationAnimation(
+        sourceImageView: UIView,
+        destinationImageView: UIView,
+        fromViewController: UIViewController,
+        toViewController: UIViewController,
+        heroContext: KestrelTransitionContext,
+        transitionContext: UIViewControllerContextTransitioning
+    ) {
+        let config = heroContext.configuration
+
         UIView.animate(
             withDuration: config.duration * 0.6,
             delay: 0,
@@ -181,66 +206,77 @@ public class KestrelTransitionAnimator: NSObject, UIViewControllerAnimatedTransi
             initialSpringVelocity: config.springVelocity,
             options: config.animationOptions
         ) {
-            // Phase 1: Scale and move while cross-fading
+            // Transform image views to destination position and size
             sourceImageView.frame = heroContext.destinationFrame
             destinationImageView.frame = heroContext.destinationFrame
             
-            // Manually resize all internal components to destination size
+            // Resize internal components
             [sourceImageView, destinationImageView].forEach { containerView in
                 containerView.subviews.forEach { subview in
                     subview.frame = CGRect(origin: .zero, size: heroContext.destinationFrame.size)
                 }
             }
             
-            // Animate corner radius morphing on clipping containers
-            if let sourceClippingContainer = sourceImageView.subviews.last(where: { $0.layer.masksToBounds == true }) {
-                sourceClippingContainer.layer.cornerRadius = config.cornerRadius.destination
-            }
-            if let destClippingContainer = destinationImageView.subviews.last(where: { $0.layer.masksToBounds == true }) {
-                destClippingContainer.layer.cornerRadius = config.cornerRadius.destination
-            }
+            // Animate corner radius morphing
+            self.animateCornerRadiusMorphing(sourceImageView, destinationImageView, config: config)
             
-            // Also animate shadow corner radius
-            if config.shadow.isEnabled {
-                if let sourceShadow = sourceImageView.subviews.first {
-                    sourceShadow.layer.cornerRadius = config.cornerRadius.destination
-                }
-                if let destShadow = destinationImageView.subviews.first {
-                    destShadow.layer.cornerRadius = config.cornerRadius.destination
-                }
-            }
-            
-            // Cross-fade between images
+            // Cross-fade images and views
             sourceImageView.alpha = 0
             destinationImageView.alpha = 1
-            
-            // Fade out source view
+
             fromViewController.view.alpha = 0
+            toViewController.view.alpha = 1
         } completion: { _ in
-            kestrelLog(
-                "Phase 1 complete - transition image frame: \(destinationImageView.frame)",
-                level: .debug,
-                context: heroContext.transitionId
+            self.completePresentationTransition(
+                sourceImageView: sourceImageView,
+                destinationImageView: destinationImageView,
+                fromViewController: fromViewController,
+                heroContext: heroContext,
+                transitionContext: transitionContext
             )
-            
-            // Notify that transition image is now in final position and immediately show real view
-            kestrelLog(
-                "Phase 1 complete - showing target view and cleaning up",
-                level: .debug,
-                context: heroContext.transitionId
-            )
-            NotificationCenter.default.post(name: Notification.Name("KestrelTransitionImageInPosition"), object: nil)
-            
-            // Immediately clean up transition views and complete
-            sourceImageView.removeFromSuperview()
-            destinationImageView.removeFromSuperview()
-            fromViewController.view.alpha = 1
-            
-            KestrelTransitionRegistry.shared.clearTransitionInProgress(heroContext.transitionId)
-            transitionContext.completeTransition(true)
         }
     }
     
+    /// Animates corner radius changes during image morphing
+    private func animateCornerRadiusMorphing(_ sourceImageView: UIView, _ destinationImageView: UIView, config: KestrelTransitionConfiguration) {
+        // Animate corner radius on clipping containers
+        if let sourceClippingContainer = sourceImageView.subviews.last(where: { $0.layer.masksToBounds == true }) {
+            sourceClippingContainer.layer.cornerRadius = config.cornerRadius.destination
+        }
+        if let destClippingContainer = destinationImageView.subviews.last(where: { $0.layer.masksToBounds == true }) {
+            destClippingContainer.layer.cornerRadius = config.cornerRadius.destination
+        }
+        
+        // Animate shadow corner radius if enabled
+        if config.shadow.isEnabled {
+            if let sourceShadow = sourceImageView.subviews.first {
+                sourceShadow.layer.cornerRadius = config.cornerRadius.destination
+            }
+            if let destShadow = destinationImageView.subviews.first {
+                destShadow.layer.cornerRadius = config.cornerRadius.destination
+            }
+        }
+    }
+    
+    /// Completes presentation transition with cleanup
+    private func completePresentationTransition(
+        sourceImageView: UIView,
+        destinationImageView: UIView,
+        fromViewController: UIViewController,
+        heroContext: KestrelTransitionContext,
+        transitionContext: UIViewControllerContextTransitioning
+    ) {
+        NotificationCenter.default.post(name: Notification.Name("KestrelTransitionImageInPosition"), object: nil)
+        
+        sourceImageView.removeFromSuperview()
+        destinationImageView.removeFromSuperview()
+        fromViewController.view.alpha = 1
+        
+        KestrelTransitionRegistry.shared.clearTransitionInProgress(heroContext.transitionId)
+        transitionContext.completeTransition(true)
+    }
+    
+    /// Animates dismissal transition with image reverse morphing and view fade-out
     private func animateDismissal(using transitionContext: UIViewControllerContextTransitioning, heroContext: KestrelTransitionContext) {
         guard let fromViewController = transitionContext.viewController(forKey: .from),
               let toViewController = transitionContext.viewController(forKey: .to) else {
@@ -248,26 +284,40 @@ public class KestrelTransitionAnimator: NSObject, UIViewControllerAnimatedTransi
             return
         }
         
+        // Notify target to hide and setup source view
+        NotificationCenter.default.post(name: Notification.Name("KestrelTransitionDismissalStarted"), object: heroContext.transitionId)
+        
+        setupSourceViewForDismissal(toViewController, transitionContext: transitionContext)
+        
+        let (sourceImageView, destinationImageView) = setupDismissalImageViews(heroContext, transitionContext: transitionContext)
+        
+        performDismissalAnimation(
+            sourceImageView: sourceImageView,
+            destinationImageView: destinationImageView,
+            fromViewController: fromViewController,
+            toViewController: toViewController,
+            heroContext: heroContext,
+            transitionContext: transitionContext
+        )
+    }
+    
+    /// Sets up source view controller for dismissal
+    private func setupSourceViewForDismissal(_ toViewController: UIViewController, transitionContext: UIViewControllerContextTransitioning) {
         let containerView = transitionContext.containerView
-        let config = heroContext.configuration
-        
-        kestrelLog("Setting up dismissal animation", level: .debug, context: heroContext.transitionId)
-        
-        // Immediately notify to hide the real image in detail view
-        kestrelLog("Notifying target view to hide for dismissal", level: .debug, context: heroContext.transitionId)
-        NotificationCenter.default.post(name: Notification.Name("KestrelTransitionDismissalStarted"), object: nil)
-        
-        // Add destination view controller back with initial fade
         toViewController.view.alpha = 0.3
-        containerView.insertSubview(toViewController.view, belowSubview: fromViewController.view)
+        containerView.insertSubview(toViewController.view, belowSubview: containerView.subviews.last!)
+    }
+    
+    /// Creates and configures image views for dismissal transition
+    private func setupDismissalImageViews(_ heroContext: KestrelTransitionContext, transitionContext: UIViewControllerContextTransitioning) -> (UIView, UIView) {
+        let containerView = transitionContext.containerView
         
-        // Create morphing image views for dismissal
         let destinationImageView = createDestinationImageView(from: heroContext)
         let sourceImageView = createTransitionImageView(from: heroContext)
         sourceImageView.frame = heroContext.destinationFrame
         sourceImageView.alpha = 0
         
-        // Remove autoresizing and manually size all components to destination initially
+        // Configure manual sizing for both image views
         [destinationImageView, sourceImageView].forEach { containerView in
             containerView.subviews.forEach { subview in
                 subview.autoresizingMask = []
@@ -278,13 +328,20 @@ public class KestrelTransitionAnimator: NSObject, UIViewControllerAnimatedTransi
         containerView.addSubview(destinationImageView)
         containerView.addSubview(sourceImageView)
         
-        // Single phase dismissal animation
-        kestrelLog(
-            "Starting dismissal animation (\(config.duration)s)",
-            level: .debug,
-            context: heroContext.transitionId
-        )
-        
+        return (sourceImageView, destinationImageView)
+    }
+    
+    /// Performs the main dismissal animation with reverse morphing
+    private func performDismissalAnimation(
+        sourceImageView: UIView,
+        destinationImageView: UIView,
+        fromViewController: UIViewController,
+        toViewController: UIViewController,
+        heroContext: KestrelTransitionContext,
+        transitionContext: UIViewControllerContextTransitioning
+    ) {
+        let config = heroContext.configuration
+
         UIView.animate(
             withDuration: config.duration,
             delay: 0,
@@ -292,45 +349,71 @@ public class KestrelTransitionAnimator: NSObject, UIViewControllerAnimatedTransi
             initialSpringVelocity: config.springVelocity,
             options: config.animationOptions
         ) {
-            // Fade out detail content immediately
+            // Fade out detail content and cross-fade images
             fromViewController.view.alpha = 0
             destinationImageView.alpha = 0
+
             sourceImageView.alpha = 1
+
             
-            // Move image back to source position
+            // Transform image back to source position and size
             sourceImageView.frame = heroContext.sourceFrame
-            
-            // Manually resize all internal components to source size
-            sourceImageView.subviews.forEach { subview in
-                subview.frame = CGRect(origin: .zero, size: heroContext.sourceFrame.size)
-            }
-            
-            // Animate corner radius back to source on clipping container
-            if let sourceClippingContainer = sourceImageView.subviews.last(where: { $0.layer.masksToBounds == true }) {
-                sourceClippingContainer.layer.cornerRadius = config.cornerRadius.source
-            }
-            
-            // Also animate shadow corner radius back
-            if config.shadow.isEnabled {
-                if let sourceShadow = sourceImageView.subviews.first {
-                    sourceShadow.layer.cornerRadius = config.cornerRadius.source
+            destinationImageView.frame = heroContext.sourceFrame
+
+            // Resize internal components
+            [sourceImageView, destinationImageView].forEach { containerView in
+                containerView.subviews.forEach { subview in
+                    subview.frame = CGRect(origin: .zero, size: heroContext.sourceFrame.size)
                 }
             }
+
+            // Reverse corner radius morphing
+            self.animateReverseCornerRadiusMorphing(sourceImageView, config: config)
             
-            // Fade in list view progressively
+            // Fade in source view
             toViewController.view.alpha = 1
         } completion: { finished in
-            kestrelLog(
-                "Dismissal complete - cleaning up transition views",
-                level: .info,
-                context: heroContext.transitionId
+            self.completeDismissalTransition(
+                sourceImageView: sourceImageView,
+                destinationImageView: destinationImageView,
+                heroContext: heroContext,
+                transitionContext: transitionContext,
+                finished: finished
             )
-            destinationImageView.removeFromSuperview()
-            sourceImageView.removeFromSuperview()
-            
-            KestrelTransitionRegistry.shared.clearTransitionInProgress(heroContext.transitionId)
-            transitionContext.completeTransition(finished)
         }
+    }
+    
+    /// Animates corner radius changes back to source during dismissal
+    private func animateReverseCornerRadiusMorphing(_ sourceImageView: UIView, config: KestrelTransitionConfiguration) {
+        if let sourceClippingContainer = sourceImageView.subviews.last(where: { $0.layer.masksToBounds == true }) {
+            sourceClippingContainer.layer.cornerRadius = config.cornerRadius.source
+        }
+        
+        if config.shadow.isEnabled {
+            if let sourceShadow = sourceImageView.subviews.first {
+                sourceShadow.layer.cornerRadius = config.cornerRadius.source
+            }
+        }
+    }
+    
+    /// Completes dismissal transition with cleanup
+    private func completeDismissalTransition(
+        sourceImageView: UIView,
+        destinationImageView: UIView,
+        heroContext: KestrelTransitionContext,
+        transitionContext: UIViewControllerContextTransitioning,
+        finished: Bool
+    ) {
+        NotificationCenter.default.post(
+            name: Notification.Name("KestrelTransitionSourceReached"),
+            object: heroContext.transitionId
+        )
+        
+        destinationImageView.removeFromSuperview()
+        sourceImageView.removeFromSuperview()
+        
+        KestrelTransitionRegistry.shared.clearTransitionInProgress(heroContext.transitionId)
+        transitionContext.completeTransition(finished)
     }
     
     private func createTransitionImageView(from context: KestrelTransitionContext) -> UIView {

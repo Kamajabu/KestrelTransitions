@@ -9,15 +9,18 @@ import SwiftUI
 
 // MARK: - Kestrel Transition Source Modifier
 
-public struct KestrelTransitionModifier: ViewModifier {
+// LIST IMAGE
+public struct KestrelTransitionSourceModifier: ViewModifier {
     let id: String
     let image: UIImage
     let configuration: KestrelTransitionConfiguration
 
     @State private var sourceFrame: CGRect = .zero
+    @State private var isVisible: Bool = true
     
     public func body(content: Content) -> some View {
         let modifiedContent = content
+            .opacity(isVisible ? 1 : 0)
             .background(
                 GeometryReader { geometry in
                     Color.clear
@@ -38,8 +41,48 @@ public struct KestrelTransitionModifier: ViewModifier {
                     }
                 }
             }
+            .onAppear {
+                setupTransitionCoordination()
+            }
+            .onDisappear {
+                NotificationCenter.default.removeObserver(self)
+            }
         
         return AnyView(modifiedContent)
+    }
+    
+    private func setupTransitionCoordination() {
+        // Listen for presentation transition start - hide source view
+        NotificationCenter.default.addObserver(
+            forName: Notification.Name("KestrelTransitionPresentationStarted"),
+            object: nil,
+            queue: .main
+        ) { notification in
+            if let transitionId = notification.object as? String, transitionId == id {
+                kestrelLog(
+                    "Presentation started, hiding source view (id: '\(id)')",
+                    level: .debug,
+                    context: id
+                )
+                isVisible = false
+            }
+        }
+        
+        // Listen for dismissal animation reaching source position - show source view
+        NotificationCenter.default.addObserver(
+            forName: Notification.Name("KestrelTransitionSourceReached"),
+            object: nil,
+            queue: .main
+        ) { notification in
+            if let transitionId = notification.object as? String, transitionId == id {
+                kestrelLog(
+                    "Transition reached source position, showing source view (id: '\(id)')",
+                    level: .debug,
+                    context: id
+                )
+                isVisible = true
+            }
+        }
     }
     
     private func triggerTransition() {
@@ -55,11 +98,11 @@ public struct KestrelTransitionModifier: ViewModifier {
 }
 
 // MARK: - Kestrel Transition Target Modifier
-
+// DETAILS IMAGE
 public struct KestrelTransitionTargetModifier: ViewModifier {
     let targetId: String
     
-    @State private var isVisible: Bool = false
+    @State private var isVisible: Bool = true
     
     public func body(content: Content) -> some View {
         content
@@ -95,6 +138,21 @@ public struct KestrelTransitionTargetModifier: ViewModifier {
     
     private func setupTransitionCoordination() {
         NotificationCenter.default.addObserver(
+            forName: Notification.Name("KestrelTransitionPresentationStarted"),
+            object: nil,
+            queue: .main
+        ) { notification in
+            if let transitionId = notification.object as? String, transitionId == targetId {
+                kestrelLog(
+                    "Presentation started, hiding target view (id: '\(targetId)')",
+                    level: .debug,
+                    context: targetId
+                )
+                isVisible = false
+            }
+        }
+
+        NotificationCenter.default.addObserver(
             forName: Notification.Name("KestrelTransitionImageInPosition"),
             object: nil,
             queue: .main
@@ -111,13 +169,28 @@ public struct KestrelTransitionTargetModifier: ViewModifier {
             forName: Notification.Name("KestrelTransitionDismissalStarted"),
             object: nil,
             queue: .main
+        ) { notification in
+            if let transitionId = notification.object as? String, transitionId == targetId {
+                kestrelLog(
+                    "Target view hiding for dismissal (id: '\(targetId)')",
+                    level: .debug,
+                    context: targetId
+                )
+                isVisible = false
+            }
+        }
+        
+        NotificationCenter.default.addObserver(
+            forName: Notification.Name("KestrelTransitionDismissalCompleted"),
+            object: nil,
+            queue: .main
         ) { _ in
             kestrelLog(
-                "Target view hiding for dismissal (id: '\(targetId)')",
+                "Dismissal completed, keeping target view hidden (id: '\(targetId)')",
                 level: .debug,
                 context: targetId
             )
-            isVisible = false
+            // Keep target view hidden after dismissal completes
         }
     }
 }
@@ -136,7 +209,7 @@ public extension View {
         configuration: KestrelTransitionConfiguration = .default
     ) -> some View {
         self.modifier(
-            KestrelTransitionModifier(
+            KestrelTransitionSourceModifier(
                 id: id,
                 image: image,
                 configuration: configuration
