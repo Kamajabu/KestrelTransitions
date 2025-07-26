@@ -102,7 +102,7 @@ class KestrelFrameBeaconView: UIView {
 
 // MARK: - SwiftUI Integration
 
-public struct KestrelTransitionKey: PreferenceKey {
+public struct KestrelTransitionSourceKey: PreferenceKey {
     public static var defaultValue: [String: CGRect] = [:]
     
     public static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {

@@ -7,16 +7,40 @@
 
 import SwiftUI
 
+// MARK: - Common Transition Coordination
+
+/// Protocol for shared transition coordination functionality
+private protocol TransitionCoordinating {
+    var transitionId: String { get }
+    var isVisible: Bool { get set }
+    
+    func setupNotificationObservers()
+}
+
+/// Shared setup for notification observers across modifiers
+private extension TransitionCoordinating {
+    func addObserver(for name: Notification.Name, handler: @escaping (Notification) -> Void) {
+        kestrelNotificationCenter.addObserver(
+            forName: name,
+            object: nil,
+            queue: .main,
+            using: handler
+        )
+    }
+}
+
 // MARK: - Kestrel Transition Source Modifier
 
 // LIST IMAGE
-public struct KestrelTransitionSourceModifier: ViewModifier {
+public struct KestrelTransitionSourceModifier: ViewModifier, TransitionCoordinating {
     let id: String
     let image: UIImage
     let configuration: KestrelTransitionConfiguration
 
     @State private var sourceFrame: CGRect = .zero
-    @State private var isVisible: Bool = true
+    @State fileprivate var isVisible: Bool = true
+    
+    var transitionId: String { id }
     
     public func body(content: Content) -> some View {
         let modifiedContent = content
@@ -24,16 +48,12 @@ public struct KestrelTransitionSourceModifier: ViewModifier {
             .background(
                 GeometryReader { geometry in
                     Color.clear
-                        .preference(key: KestrelTransitionKey.self, value: [id: geometry.frame(in: .global)])
+                        .preference(key: KestrelTransitionSourceKey.self, value: [id: geometry.frame(in: .global)])
                 }
             )
-            .onPreferenceChange(KestrelTransitionKey.self) { frames in
+            .onPreferenceChange(KestrelTransitionSourceKey.self) { frames in
                 if let frame = frames[id] {
-                    kestrelLog(
-                        "Source frame captured for id '\(id)': \(frame)",
-                        level: .debug,
-                        context: id
-                    )
+                    kestrelLog("Source frame captured: \(frame)", level: .debug, context: id)
                     sourceFrame = frame
                     
                     KestrelTransitionRegistry.shared.registerTransitionTrigger(for: id) {
@@ -42,44 +62,28 @@ public struct KestrelTransitionSourceModifier: ViewModifier {
                 }
             }
             .onAppear {
-                setupTransitionCoordination()
+                setupNotificationObservers()
             }
             .onDisappear {
-                NotificationCenter.default.removeObserver(self)
+                kestrelNotificationCenter.removeObserver(self)
             }
         
         return AnyView(modifiedContent)
     }
     
-    private func setupTransitionCoordination() {
-        // Listen for presentation transition start - hide source view
-        NotificationCenter.default.addObserver(
-            forName: Notification.Name("KestrelTransitionPresentationStarted"),
-            object: nil,
-            queue: .main
-        ) { notification in
+    func setupNotificationObservers() {
+        // Hide source view when presentation starts
+        addObserver(for: KestrelNotification.presentationStarted) { notification in
             if let transitionId = notification.object as? String, transitionId == id {
-                kestrelLog(
-                    "Presentation started, hiding source view (id: '\(id)')",
-                    level: .debug,
-                    context: id
-                )
+                kestrelLog("Presentation started, hiding source view", level: .debug, context: id)
                 isVisible = false
             }
         }
         
-        // Listen for dismissal animation reaching source position - show source view
-        NotificationCenter.default.addObserver(
-            forName: Notification.Name("KestrelTransitionSourceReached"),
-            object: nil,
-            queue: .main
-        ) { notification in
+        // Show source view when dismissal reaches source position
+        addObserver(for: KestrelNotification.sourceReached) { notification in
             if let transitionId = notification.object as? String, transitionId == id {
-                kestrelLog(
-                    "Transition reached source position, showing source view (id: '\(id)')",
-                    level: .debug,
-                    context: id
-                )
+                kestrelLog("Source position reached, showing source view", level: .debug, context: id)
                 isVisible = true
             }
         }
@@ -99,10 +103,12 @@ public struct KestrelTransitionSourceModifier: ViewModifier {
 
 // MARK: - Kestrel Transition Target Modifier
 // DETAILS IMAGE
-public struct KestrelTransitionTargetModifier: ViewModifier {
+public struct KestrelTransitionTargetModifier: ViewModifier, TransitionCoordinating {
     let targetId: String
     
-    @State private var isVisible: Bool = true
+    @State fileprivate var isVisible: Bool = true
+    
+    var transitionId: String { targetId }
     
     public func body(content: Content) -> some View {
         content
@@ -115,20 +121,16 @@ public struct KestrelTransitionTargetModifier: ViewModifier {
             )
             .onPreferenceChange(KestrelTransitionTargetKey.self) { frames in
                 if let frame = frames[targetId] {
-                    kestrelLog(
-                        "Target frame registered for id '\(targetId)': \(frame)",
-                        level: .debug,
-                        context: targetId
-                    )
+                    kestrelLog("Target frame registered: \(frame)", level: .debug, context: targetId)
                     KestrelTransitionRegistry.shared.setDestinationFrame(frame, for: targetId)
                     KestrelTransitionRegistry.shared.completePendingTransition(for: targetId, destinationFrame: frame)
                 }
             }
             .onAppear {
-                setupTransitionCoordination()
+                setupNotificationObservers()
             }
             .onDisappear {
-                NotificationCenter.default.removeObserver(self)
+                kestrelNotificationCenter.removeObserver(self)
             }
             .background(
                 KestrelFrameBridge(transitionId: targetId, frameType: .target)
@@ -136,61 +138,27 @@ public struct KestrelTransitionTargetModifier: ViewModifier {
             )
     }
     
-    private func setupTransitionCoordination() {
-        NotificationCenter.default.addObserver(
-            forName: Notification.Name("KestrelTransitionPresentationStarted"),
-            object: nil,
-            queue: .main
-        ) { notification in
+    func setupNotificationObservers() {
+        // Hide target view when presentation starts
+        addObserver(for: KestrelNotification.presentationStarted) { notification in
             if let transitionId = notification.object as? String, transitionId == targetId {
-                kestrelLog(
-                    "Presentation started, hiding target view (id: '\(targetId)')",
-                    level: .debug,
-                    context: targetId
-                )
+                kestrelLog("Presentation started, hiding target view", level: .debug, context: targetId)
                 isVisible = false
             }
         }
 
-        NotificationCenter.default.addObserver(
-            forName: Notification.Name("KestrelTransitionImageInPosition"),
-            object: nil,
-            queue: .main
-        ) { _ in
-            kestrelLog(
-                "Target view becoming visible for id '\(targetId)'",
-                level: .debug,
-                context: targetId
-            )
+        // Show target view when image reaches position
+        addObserver(for: KestrelNotification.imageInPosition) { _ in
+            kestrelLog("Target view becoming visible", level: .debug, context: targetId)
             isVisible = true
         }
         
-        NotificationCenter.default.addObserver(
-            forName: Notification.Name("KestrelTransitionDismissalStarted"),
-            object: nil,
-            queue: .main
-        ) { notification in
+        // Hide target view when dismissal starts
+        addObserver(for: KestrelNotification.dismissalStarted) { notification in
             if let transitionId = notification.object as? String, transitionId == targetId {
-                kestrelLog(
-                    "Target view hiding for dismissal (id: '\(targetId)')",
-                    level: .debug,
-                    context: targetId
-                )
+                kestrelLog("Target view hiding for dismissal", level: .debug, context: targetId)
                 isVisible = false
             }
-        }
-        
-        NotificationCenter.default.addObserver(
-            forName: Notification.Name("KestrelTransitionDismissalCompleted"),
-            object: nil,
-            queue: .main
-        ) { _ in
-            kestrelLog(
-                "Dismissal completed, keeping target view hidden (id: '\(targetId)')",
-                level: .debug,
-                context: targetId
-            )
-            // Keep target view hidden after dismissal completes
         }
     }
 }

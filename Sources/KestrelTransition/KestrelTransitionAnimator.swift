@@ -20,20 +20,12 @@ public class KestrelTransitionAnimator: NSObject, UIViewControllerAnimatedTransi
         self.context = context
         super.init()
         
-        kestrelLog(
-            "Animator initialized - presenting: \(isPresenting)",
-            level: .info,
-            context: context?.transitionId
-        )
+        kestrelLog("Animator initialized - presenting: \(isPresenting)", level: .info, context: context?.transitionId)
         
         if let context = context {
-            kestrelLog(
-                "Context - source: \(context.sourceFrame), destination: \(context.destinationFrame)",
-                level: .debug,
-                context: context.transitionId
-            )
+            kestrelLog("Source: \(context.sourceFrame), destination: \(context.destinationFrame)", level: .debug, context: context.transitionId)
         } else {
-            kestrelLog("No transition context available, will use default transition", level: .warning)
+            kestrelLog("No transition context available", level: .warning)
         }
     }
     
@@ -42,11 +34,7 @@ public class KestrelTransitionAnimator: NSObject, UIViewControllerAnimatedTransi
     }
     
     public func animateTransition(using transitionContext: UIViewControllerContextTransitioning) {
-        kestrelLog(
-            "Starting \(isPresenting ? "presentation" : "dismissal") animation",
-            level: .info,
-            context: context?.transitionId
-        )
+        kestrelLog("Starting \(isPresenting ? "presentation" : "dismissal") animation", level: .info, context: context?.transitionId)
         
         guard var context = context else {
             kestrelLog("No context available, cannot perform transition", level: .error)
@@ -60,8 +48,8 @@ public class KestrelTransitionAnimator: NSObject, UIViewControllerAnimatedTransi
         
         if isPresenting {
             // Notify that presentation is starting - hide source view
-            NotificationCenter.default.post(
-                name: Notification.Name("KestrelTransitionPresentationStarted"),
+            kestrelNotificationCenter.post(
+                name: KestrelNotification.presentationStarted,
                 object: context.transitionId
             )
             animatePresentation(using: transitionContext, heroContext: context)
@@ -74,11 +62,7 @@ public class KestrelTransitionAnimator: NSObject, UIViewControllerAnimatedTransi
         context: KestrelTransitionContext,
         transitionContext: UIViewControllerContextTransitioning
     ) -> KestrelTransitionContext {
-        kestrelLog(
-            "Destination frame not available, allowing view to render first...",
-            level: .warning,
-            context: context.transitionId
-        )
+        kestrelLog("Destination frame not available, waiting for render", level: .warning, context: context.transitionId)
         
         guard let toViewController = transitionContext.viewController(forKey: .to) else {
             fatalError("KestrelTransition: No destination view controller available")
@@ -102,11 +86,7 @@ public class KestrelTransitionAnimator: NSObject, UIViewControllerAnimatedTransi
         while attempts < maxAttempts {
             if let bridgeFrame = KestrelTransitionRegistry.shared.getDestinationFrame(for: context.transitionId),
                bridgeFrame != .zero {
-                kestrelLog(
-                    "Bridge provided destination frame after rendering: \(bridgeFrame)",
-                    level: .info,
-                    context: context.transitionId
-                )
+                kestrelLog("Bridge provided destination frame: \(bridgeFrame)", level: .info, context: context.transitionId)
                 
                 return KestrelTransitionContext(
                     sourceFrame: context.sourceFrame,
@@ -121,11 +101,7 @@ public class KestrelTransitionAnimator: NSObject, UIViewControllerAnimatedTransi
             attempts += 1
         }
         
-        kestrelLog(
-            "Bridge system failed to provide destination frame after \(attempts) attempts",
-            level: .error,
-            context: context.transitionId
-        )
+        kestrelLog("Bridge system failed after \(attempts) attempts", level: .error, context: context.transitionId)
         fatalError("KestrelTransition: Bridge system could not provide destination frame for id '\(context.transitionId)'. Ensure kestrelTransitionTarget is properly configured and view is rendered.")
     }
     
@@ -266,7 +242,7 @@ public class KestrelTransitionAnimator: NSObject, UIViewControllerAnimatedTransi
         heroContext: KestrelTransitionContext,
         transitionContext: UIViewControllerContextTransitioning
     ) {
-        NotificationCenter.default.post(name: Notification.Name("KestrelTransitionImageInPosition"), object: nil)
+        kestrelNotificationCenter.post(name: KestrelNotification.imageInPosition, object: nil)
         
         sourceImageView.removeFromSuperview()
         destinationImageView.removeFromSuperview()
@@ -285,7 +261,7 @@ public class KestrelTransitionAnimator: NSObject, UIViewControllerAnimatedTransi
         }
         
         // Notify target to hide and setup source view
-        NotificationCenter.default.post(name: Notification.Name("KestrelTransitionDismissalStarted"), object: heroContext.transitionId)
+        kestrelNotificationCenter.post(name: KestrelNotification.dismissalStarted, object: heroContext.transitionId)
         
         setupSourceViewForDismissal(toViewController, transitionContext: transitionContext)
         
@@ -404,8 +380,8 @@ public class KestrelTransitionAnimator: NSObject, UIViewControllerAnimatedTransi
         transitionContext: UIViewControllerContextTransitioning,
         finished: Bool
     ) {
-        NotificationCenter.default.post(
-            name: Notification.Name("KestrelTransitionSourceReached"),
+        kestrelNotificationCenter.post(
+            name: KestrelNotification.sourceReached,
             object: heroContext.transitionId
         )
         
@@ -417,11 +393,7 @@ public class KestrelTransitionAnimator: NSObject, UIViewControllerAnimatedTransi
     }
     
     private func createTransitionImageView(from context: KestrelTransitionContext) -> UIView {
-        kestrelLog(
-            "Creating source transition image view with frame: \(context.sourceFrame)",
-            level: .debug,
-            context: context.transitionId
-        )
+        kestrelLog("Creating source image view: \(context.sourceFrame)", level: .debug, context: context.transitionId)
         
         let config = context.configuration
         let containerView = UIView(frame: context.sourceFrame)
@@ -475,11 +447,7 @@ public class KestrelTransitionAnimator: NSObject, UIViewControllerAnimatedTransi
     }
     
     private func createDestinationImageView(from context: KestrelTransitionContext) -> UIView {
-        kestrelLog(
-            "Creating destination transition image view with frame: \(context.destinationFrame)",
-            level: .debug,
-            context: context.transitionId
-        )
+        kestrelLog("Creating destination image view: \(context.destinationFrame)", level: .debug, context: context.transitionId)
         
         let config = context.configuration
         let containerView = UIView(frame: context.destinationFrame)
