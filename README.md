@@ -56,7 +56,7 @@ dependencies: [
 ```swift
 import KestrelTransitions
 
-class ProductsCoordinator: BaseCoordinator<Void> {
+class ProductsCoordinator: Coordinator<Void> {
     private let navigationController: UINavigationController
     
     init(navigationController: UINavigationController) {
