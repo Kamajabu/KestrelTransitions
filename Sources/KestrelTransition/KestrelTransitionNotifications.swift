@@ -10,7 +10,7 @@ import Foundation
 // MARK: - Kestrel Transition Notifications
 
 /// Package-specific notification center for KestrelTransitions
-internal let kestrelNotificationCenter = NotificationCenter()
+internal var KestrelNotificationCenter = NotificationCenter.default
 
 /// Notification names used internally by KestrelTransitions
 internal enum KestrelNotification {
@@ -25,4 +25,50 @@ internal enum KestrelNotification {
     
     /// Posted when dismissal animation reaches source position - shows source view
     static let sourceReached = Notification.Name("KestrelTransition.SourceReached")
+}
+
+struct KestrelObserver {
+    enum ObserverType {
+        case presentationStarted
+        case dismissalStarted
+        case imageInPosition
+        case sourceReached
+
+        var name: Notification.Name {
+            switch self {
+            case .presentationStarted:
+                return KestrelNotification.presentationStarted
+            case .dismissalStarted:
+                return KestrelNotification.dismissalStarted
+            case .imageInPosition:
+                return KestrelNotification.imageInPosition
+            case .sourceReached:
+                return KestrelNotification.sourceReached
+            }
+        }
+    }
+
+    /// Adds an observer that automatically filters notifications by transition ID
+    static func addFilteredObserver(
+        for type: ObserverType,
+        transitionId: String,
+        handler: @escaping () -> Void
+    ) -> NSObjectProtocol {
+        KestrelNotificationCenter.addObserver(
+            forName: type.name,
+            object: nil,
+            queue: .main
+        ) { notification in
+            guard let notificationId = notification.object as? String,
+                  notificationId == transitionId else {
+                return
+            }
+            handler()
+        }
+    }
+
+    /// Removes a specific observer
+    static func removeObserver(_ observer: NSObjectProtocol) {
+        KestrelNotificationCenter.removeObserver(observer)
+    }
 }

@@ -181,10 +181,9 @@ public final class KestrelLogger {
     ) {
         guard config.isEnabled && level >= config.level else { return }
         
-        let fileName = URL(fileURLWithPath: file).lastPathComponent
-        let contextString = context.map { " [\($0)]" } ?? ""
-        let logMessage = "\(level.emoji) \(message)\(contextString) (\(fileName):\(line))"
-        
+        let contextString = context.map { " [\($0.suffix(4))]" } ?? ""
+        let logMessage = "\(level.emoji) \(message)\(contextString)"
+
         osLogger.log(level: level.osLogType, "\(logMessage)")
     }
 }

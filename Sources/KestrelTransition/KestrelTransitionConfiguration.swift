@@ -183,18 +183,20 @@ public struct BackgroundConfig {
 // MARK: - Transition Context with Configuration
 
 /// Enhanced transition context that includes configuration
-public struct KestrelTransitionContext {
-    public let sourceFrame: CGRect
-    public let destinationFrame: CGRect
+public class KestrelTransitionContext {
     public let image: UIImage
     public let transitionId: String
+
     public let configuration: KestrelTransitionConfiguration
-    
+
+    public private(set)var sourceFrame: CGRect
+    public private(set)var destinationFrame: CGRect
+
     public init(
-        sourceFrame: CGRect,
-        destinationFrame: CGRect,
+        sourceFrame: CGRect = .zero,
+        destinationFrame: CGRect = .zero,
         image: UIImage,
-        transitionId: String = "",
+        transitionId: String,
         configuration: KestrelTransitionConfiguration = .default
     ) {
         self.sourceFrame = sourceFrame
@@ -202,5 +204,13 @@ public struct KestrelTransitionContext {
         self.image = image
         self.transitionId = transitionId
         self.configuration = configuration
+    }
+
+    public func updateSourceFrame(_ frame: CGRect) {
+        self.sourceFrame = frame
+    }
+
+    public func updateDestinationFrame(_ frame: CGRect) {
+        self.destinationFrame = frame
     }
 }

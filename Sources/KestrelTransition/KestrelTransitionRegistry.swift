@@ -8,98 +8,6 @@
 import UIKit
 import SwiftUI
 
-// MARK: - Frame Bridge System
-
-/// A UIViewRepresentable that acts as a bridge to communicate frame information from SwiftUI to UIKit
-struct KestrelFrameBridge: UIViewRepresentable {
-    let transitionId: String
-    let frameType: FrameType
-    
-    enum FrameType {
-        case source
-        case target
-    }
-    
-    func makeUIView(context: Context) -> KestrelFrameBeaconView {
-        let view = KestrelFrameBeaconView()
-        view.transitionId = transitionId
-        view.frameType = frameType
-        view.backgroundColor = UIColor.clear
-        view.isUserInteractionEnabled = false
-        return view
-    }
-    
-    func updateUIView(_ uiView: KestrelFrameBeaconView, context: Context) {
-        // Update frame information when SwiftUI updates
-        DispatchQueue.main.async {
-            uiView.reportFrame()
-        }
-    }
-}
-
-/// A UIView that reports its frame to the transition registry
-class KestrelFrameBeaconView: UIView {
-    var transitionId: String = ""
-    var frameType: KestrelFrameBridge.FrameType = .target
-    
-    override func didMoveToSuperview() {
-        super.didMoveToSuperview()
-        DispatchQueue.main.async {
-            self.reportFrame()
-        }
-    }
-    
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        reportFrame()
-    }
-    
-    override func didMoveToWindow() {
-        super.didMoveToWindow()
-        DispatchQueue.main.async {
-            self.reportFrame()
-        }
-    }
-    
-    func reportFrame() {
-        guard !transitionId.isEmpty else { return }
-        
-        guard let targetView = superview else {
-            kestrelLog(
-                "Bridge has no superview for id '\(transitionId)'",
-                level: .warning,
-                context: transitionId
-            )
-            return
-        }
-        
-        let globalFrame = targetView.superview?.convert(targetView.frame, to: nil) ?? targetView.frame
-        
-        guard globalFrame.width > 0 && globalFrame.height > 0 else {
-            kestrelLog(
-                "Bridge found zero-sized frame for id '\(transitionId)', skipping",
-                level: .warning,
-                context: transitionId
-            )
-            return
-        }
-        
-        kestrelLog(
-            "Bridge reporting \(frameType) frame for id '\(transitionId)': \(globalFrame)",
-            level: .debug,
-            context: transitionId
-        )
-        
-        switch frameType {
-        case .target:
-            KestrelTransitionRegistry.shared.setDestinationFrame(globalFrame, for: transitionId)
-            KestrelTransitionRegistry.shared.completePendingTransition(for: transitionId, destinationFrame: globalFrame)
-        case .source:
-            break
-        }
-    }
-}
-
 // MARK: - SwiftUI Integration
 
 public struct KestrelTransitionSourceKey: PreferenceKey {
@@ -125,20 +33,12 @@ public class KestrelTransitionRegistry: ObservableObject {
     public static let shared = KestrelTransitionRegistry()
     
     private var transitionDelegate: KestrelTransitionDelegate?
-    private var destinationFrames: [String: CGRect] = [:]
-    private var sourceModifiers: [String: () -> KestrelTransitionContext] = [:]
-    private var pendingTransitions: [String: PendingTransition] = [:]
-    private var transitionsInProgress: Set<String> = []
-    
-    private struct PendingTransition {
-        let sourceFrame: CGRect
-        let image: UIImage
-        let configuration: KestrelTransitionConfiguration
-    }
+    private var transitionContexts: [String: KestrelTransitionContext] = [:]
     
     private init() {}
-    
-    public func setupTransition(for navigationController: UINavigationController) {
+
+    /// Sets up the transition delegate for a given navigation controller which is responsible for handling transitions.
+    public func setupTransitionDelegate(for navigationController: UINavigationController) {
         kestrelLog("Setting up transition for navigation controller", level: .info)
         if transitionDelegate == nil {
             transitionDelegate = KestrelTransitionDelegate()
@@ -146,112 +46,40 @@ public class KestrelTransitionRegistry: ObservableObject {
         }
         navigationController.delegate = transitionDelegate
     }
-    
-    public func registerTransition(context: KestrelTransitionContext) {
-        kestrelLog("Registering transition context with delegate", level: .info, context: context.transitionId)
-        transitionsInProgress.insert(context.transitionId)
-        transitionDelegate?.setKestrelContext(context)
-    }
-    
-    public func setDestinationFrame(_ frame: CGRect, for id: String) {
-        kestrelLog("Storing destination frame: \(frame)", level: .debug, context: id)
-        destinationFrames[id] = frame
-    }
-    
-    public func getDestinationFrame(for id: String) -> CGRect? {
-        let frame = destinationFrames[id]
-        if let frame = frame {
-            kestrelLog("Retrieved destination frame: \(frame)", level: .debug, context: id)
-        } else {
-            kestrelLog("No destination frame found", level: .warning, context: id)
-        }
-        return frame
-    }
-    
-    public func clearTransitionInProgress(_ id: String) {
-        kestrelLog("Clearing transition in progress", level: .debug, context: id)
-        transitionsInProgress.remove(id)
-    }
-    
-    public func registerSourceModifier(for id: String, modifier: @escaping () -> KestrelTransitionContext) {
-        kestrelLog("Registering source modifier", level: .debug, context: id)
-        sourceModifiers[id] = modifier
-    }
-    
-    public func prepareTransition(for id: String) {
-        kestrelLog("Preparing transition context", level: .info, context: id)
-        if let createContext = sourceModifiers[id] {
-            let context = createContext()
-            registerTransition(context: context)
-        } else {
-            kestrelLog("No source modifier registered", level: .warning, context: id)
-        }
-    }
-    
-    public func isDestinationFrameAvailable(for id: String) -> Bool {
-        let frame = destinationFrames[id]
-        return frame != nil && frame != .zero
-    }
-    
-    public func setPendingTransition(
-        id: String,
-        sourceFrame: CGRect,
-        image: UIImage,
-        configuration: KestrelTransitionConfiguration
-    ) {
-        kestrelLog(
-            "Storing pending transition for id '\(id)'",
-            level: .debug,
-            context: id
-        )
-        pendingTransitions[id] = PendingTransition(
-            sourceFrame: sourceFrame,
-            image: image,
-            configuration: configuration
-        )
-    }
-    
-    public func completePendingTransition(for id: String, destinationFrame: CGRect) {
-        guard let pending = pendingTransitions[id] else {
-            kestrelLog(
-                "No pending transition found for id '\(id)'",
-                level: .warning,
-                context: id
-            )
+
+    /// Registers all information and configuration needed for a transition context, this happens as part of setting source modifier, which I'm not really fan of, but it's optimal way to not overcomplicate configuration.
+    public func registerTransitionContext(_ context: KestrelTransitionContext, allowOverwrite: Bool = false) {
+        kestrelLog("Registering transition context", level: .debug, context: context.transitionId)
+
+        let existingContext = transitionContexts[context.transitionId]
+
+        guard existingContext == nil || allowOverwrite else {
             return
         }
-        
-        kestrelLog(
-            "Updating pending transition for id '\(id)' with real destination frame: \(destinationFrame)",
-            level: .info,
-            context: id
-        )
-        
-        let updatedContext = KestrelTransitionContext(
-            sourceFrame: pending.sourceFrame,
-            destinationFrame: destinationFrame,
-            image: pending.image,
-            transitionId: id,
-            configuration: pending.configuration
-        )
-        
-        transitionDelegate?.setKestrelContext(updatedContext)
-        pendingTransitions.removeValue(forKey: id)
-        
-        kestrelLog(
-            "Context updated with real destination frame",
-            level: .info,
-            context: id
-        )
+
+        transitionContexts[context.transitionId] = context
+        kestrelLog("Transition context registered: \(context.transitionId)", level: .info, context: context.transitionId)
     }
-}
 
-// MARK: - UIViewController Extension
+    /// Sets the source frame for a given transition ID when it changes position.
+    public func setSourceFrame(_ frame: CGRect, for id: String) {
+        kestrelLog("Storing source frame: \(frame), transitionContext is \(String(describing: transitionContexts[id]))", level: .debug, context: id)
+        transitionContexts[id]?.updateSourceFrame(frame)
+    }
 
-public extension UIViewController {
-    func setupKestrelTransition() {
-        if let navigationController = navigationController {
-            KestrelTransitionRegistry.shared.setupTransition(for: navigationController)
+    /// Sets the destination frame for a transition context when already has information about it.
+    public func setDestinationFrame(_ frame: CGRect, for id: String) {
+        kestrelLog("Storing destination frame: \(frame), transitionContext is \(String(describing: transitionContexts[id]))", level: .debug, context: id)
+        transitionContexts[id]?.updateDestinationFrame(frame)
+    }
+
+    /// Lets delegate know which exactly transition context to use for next transition, so it know which frame is source and what config to use.
+    public func prepareTransition(for id: String) {
+        kestrelLog("Preparing transition context", level: .info, context: id)
+        if let contextForGivenTransition = transitionContexts[id] {
+            transitionDelegate?.setKestrelContext(contextForGivenTransition)
+        } else {
+            kestrelLog("No source modifier registered", level: .warning, context: id)
         }
     }
 }
